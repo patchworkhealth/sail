@@ -120,6 +120,10 @@ describe Sail::Setting, type: :model do
         expect(described_class.paginated(0, 8).map(&:name)).to eq(settings[0...8].map(&:name))
         expect(described_class.paginated(1, 8).map(&:name)).to eq(settings[8...16].map(&:name))
       end
+
+      it "treats a negative page as the first page" do
+        expect(described_class.paginated(-1, 8).offset_value).to eq(0)
+      end
     end
 
     describe ".by_name" do

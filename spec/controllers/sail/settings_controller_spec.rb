@@ -110,6 +110,95 @@ describe Sail::SettingsController, type: :controller do
     end
   end
 
+  describe "GET index pagination" do
+    render_views
+
+    let(:per_page) { Sail::ConstantCollection::SETTINGS_PER_PAGE }
+
+    def create_settings(range)
+      range.each { |i| Sail::Setting.create!(name: "setting_#{i}", cast_type: :string, value: "value") }
+    end
+
+    def page_link_texts
+      Nokogiri::HTML(response.body).css("#pagination .page-links a").map { |link| link.text.strip }.reject(&:empty?)
+    end
+
+    around do |example|
+      original_store = ActionController::Base.cache_store
+      original_perform_caching = ActionController::Base.perform_caching
+      ActionController::Base.cache_store = ActiveSupport::Cache::MemoryStore.new
+      ActionController::Base.perform_caching = true
+      example.run
+    ensure
+      ActionController::Base.cache_store = original_store
+      ActionController::Base.perform_caching = original_perform_caching
+    end
+
+    before { create_settings(0...per_page) }
+
+    context "when a setting is added on a later page" do
+      it "changes the ETag of the first page" do
+        get :index
+        first_etag = response.headers["ETag"]
+
+        create_settings(per_page..per_page)
+        get :index
+
+        expect(response.headers["ETag"]).not_to eq(first_etag)
+      end
+
+      it "links to the new page straight away" do
+        get :index
+        expect(page_link_texts).to eq(["1"])
+
+        create_settings(per_page..per_page)
+        get :index
+
+        expect(page_link_texts).to eq(%w[1 2])
+      end
+    end
+
+    context "when a setting is removed from a later page" do
+      before { create_settings(per_page..per_page) }
+
+      it "stops linking to the empty page straight away" do
+        get :index
+        expect(page_link_texts).to eq(%w[1 2])
+
+        Sail::Setting.find_by(name: "setting_#{per_page}").destroy
+        get :index
+
+        expect(page_link_texts).to eq(["1"])
+      end
+    end
+
+    context "when a setting on a later page is updated" do
+      before { create_settings(per_page..per_page) }
+
+      it "changes the ETag of the first page" do
+        get :index
+        first_etag = response.headers["ETag"]
+
+        Sail::Setting.find_by(name: "setting_#{per_page}").update!(value: "new value")
+        get :index
+
+        expect(response.headers["ETag"]).not_to eq(first_etag)
+      end
+    end
+
+    context "when sorting by a field" do
+      before { create_settings(per_page..per_page) }
+
+      it "keeps the sort field in the page links" do
+        get :index, params: { order_field: "updated_at" }
+
+        hrefs = Nokogiri::HTML(response.body).css("#pagination .page-links a").map { |link| link.attr("href") }
+
+        expect(hrefs).to all(include("order_field=updated_at"))
+      end
+    end
+  end
+
   describe "GET show" do
     subject { get :show, params: params, format: :json }
 

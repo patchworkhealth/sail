@@ -11,10 +11,11 @@ module Sail
     before_action :set_locale, only: :index
     after_action :log_update, only: %i[update reset], if: -> { Sail.configuration.enable_logging && @successful_update }
     def index
-      @settings = Setting.by_query(s_params[:query]).ordered_by(s_params[:order_field])
-      @number_of_pages = (@settings.count.to_f / Sail::ConstantCollection::SETTINGS_PER_PAGE).ceil
-      @settings = @settings.paginated(s_params[:page], Sail::ConstantCollection::SETTINGS_PER_PAGE)
-      fresh_when(@settings)
+      settings = Setting.by_query(s_params[:query]).ordered_by(s_params[:order_field])
+      @number_of_pages = (settings.count.to_f / Sail::ConstantCollection::SETTINGS_PER_PAGE).ceil
+      @settings = settings.paginated(s_params[:page], Sail::ConstantCollection::SETTINGS_PER_PAGE)
+      @cache_key = index_cache_key(settings)
+      fresh_when(etag: @cache_key)
     end
 
     def update
@@ -59,6 +60,17 @@ module Sail
     end
 
     private
+
+    def index_cache_key(settings)
+      [
+        "sail/settings",
+        settings.count,
+        settings.maximum(:updated_at)&.utc&.iso8601(6),
+        s_params[:page].to_i,
+        s_params[:query],
+        s_params[:order_field]
+      ]
+    end
 
     def s_params
       params.permit(:page, :query, :name,
