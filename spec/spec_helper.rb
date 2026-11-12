@@ -4,7 +4,7 @@ ENV["RAILS_ENV"] = "test"
 require File.expand_path("dummy/config/environment.rb", __dir__)
 require "rspec/rails"
 require "rails/all"
-require "database_cleaner"
+require "database_cleaner/active_record"
 require "capybara/rspec"
 require "capybara/rails"
 require "sail"
@@ -12,7 +12,7 @@ require "selenium/webdriver"
 require "webdrivers/geckodriver"
 require "rspec/retry"
 
-DatabaseCleaner.strategy = :truncation
+ActiveSupport.on_load(:active_record) { DatabaseCleaner.strategy = :truncation }
 
 class User
   def admin?
